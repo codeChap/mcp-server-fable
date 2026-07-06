@@ -17,7 +17,6 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "6"
-moka = { version = "0.12", features = ["future"] }
 
 [dev-dependencies]
 mockito = "1"

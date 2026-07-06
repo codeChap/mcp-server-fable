@@ -21,12 +21,6 @@ pub struct AskParams {
     pub messages: Option<String>,
 
     #[schemars(
-        description = "Model ID. Defaults to the server default (claude-fable-5). \
-                       Call the list_models tool for the current set of available models."
-    )]
-    pub model: Option<String>,
-
-    #[schemars(
         description = "Reasoning effort. Higher costs more tokens. Defaults to 'medium' for raw asks."
     )]
     pub effort: Option<Effort>,

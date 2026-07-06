@@ -1,4 +1,3 @@
-use moka::future::Cache;
 use reqwest::Method;
 use rmcp::{
     ErrorData as McpError, ServerHandler, handler::server::tool::ToolRouter,
@@ -6,12 +5,10 @@ use rmcp::{
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::debug;
 
 use crate::api::{
-    AnthropicClient, Effort, Message, MessagesRequest, MessagesResponse, ModelsResponse,
-    OutputConfig,
+    AnthropicClient, Effort, Message, MessagesRequest, MessagesResponse, OutputConfig,
 };
 use crate::params::{AskParams, CritiqueParams, PlanParams};
 
@@ -53,7 +50,6 @@ pub struct FableServer {
     default_model: String,
     default_max_tokens: u32,
     default_effort: Option<Effort>,
-    models_cache: Cache<(), String>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -89,13 +85,6 @@ impl FableServer {
 
         messages.push(Message::user(prompt));
         Ok(messages)
-    }
-
-    /// Resolve the model to use for a call, falling back to the server default.
-    fn resolve_model(&self, model: Option<&str>) -> String {
-        model
-            .map(str::to_string)
-            .unwrap_or_else(|| self.default_model.clone())
     }
 
     /// Assemble a Fable Messages request. Pure — no I/O — so the wire shape is
@@ -179,17 +168,11 @@ impl FableServer {
         default_max_tokens: Option<u32>,
         default_effort: Option<Effort>,
     ) -> Self {
-        let models_cache = Cache::builder()
-            .max_capacity(1)
-            .time_to_live(Duration::from_secs(300))
-            .build();
-
         Self {
             client: Arc::new(client),
             default_model: default_model.unwrap_or_else(|| DEFAULT_MODEL.to_string()),
             default_max_tokens: default_max_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
             default_effort,
-            models_cache,
             tool_router: Self::tool_router(),
         }
     }
@@ -201,7 +184,7 @@ impl FableServer {
                        their intended jobs; use this for anything else. Expensive — not for chit-chat."
     )]
     async fn ask(&self, Parameters(p): Parameters<AskParams>) -> Result<CallToolResult, McpError> {
-        debug!(model = ?p.model, "ask tool called");
+        debug!("ask tool called");
 
         let messages = Self::build_messages(p.messages.as_deref(), &p.prompt)
             .map_err(|e| McpError::invalid_params(e, None))?;
@@ -213,7 +196,7 @@ impl FableServer {
         };
 
         self.run(
-            self.resolve_model(p.model.as_deref()),
+            self.default_model.clone(),
             messages,
             p.system_prompt,
             effort,
@@ -260,40 +243,6 @@ impl FableServer {
         self.structured_task(CRITIQUE_SYSTEM, prompt, p.effort, p.max_tokens)
             .await
     }
-
-    #[tool(description = "List available Claude models and their IDs (cached for 5 minutes).")]
-    async fn list_models(&self) -> Result<CallToolResult, McpError> {
-        if let Some(cached) = self.models_cache.get(&()).await {
-            debug!("list_models: returning cached result");
-            return Ok(CallToolResult::success(vec![Content::text(cached.clone())]));
-        }
-
-        debug!("list_models: fetching from API");
-        match self
-            .client
-            .request::<(), ModelsResponse>(Method::GET, "/models?limit=1000", None)
-            .await
-        {
-            Ok(resp) => {
-                let lines: Vec<String> = resp
-                    .data
-                    .iter()
-                    .map(|m| match &m.display_name {
-                        Some(name) => format!("- {} ({})", m.id, name),
-                        None => format!("- {}", m.id),
-                    })
-                    .collect();
-                let result = if lines.is_empty() {
-                    "No models returned.".to_string()
-                } else {
-                    lines.join("\n")
-                };
-                self.models_cache.insert((), result.clone()).await;
-                Ok(CallToolResult::success(vec![Content::text(result)]))
-            }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +258,7 @@ impl ServerHandler for FableServer {
                 "Claude Fable 5 MCP server — Anthropic's most capable, most expensive model. \
                  Intended for high-value planning and code critique that is then handed to a \
                  cheaper model to execute. Tools: plan (executor-ready implementation plans), \
-                 critique (coverage-first review), ask (raw one-shot query), list_models. A \
+                 critique (coverage-first review), ask (raw one-shot query). A \
                  request Fable's safety classifiers decline is surfaced as a refusal (this is a \
                  dedicated Fable server — it does not silently retry on another model).",
             )

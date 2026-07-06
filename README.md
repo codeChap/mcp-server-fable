@@ -26,7 +26,6 @@ This server uses the **Anthropic API with an API key (API credits)** — the onl
 | `plan` | **Flagship.** Turn a goal (+ optional context) into an executor-ready implementation plan: numbered steps, exact paths/signatures, edge cases, acceptance criteria, out-of-scope notes — written to be handed to a cheaper model and executed verbatim. |
 | `critique` | Coverage-first review of code, a diff, or a design. Reports every finding with severity + confidence for downstream filtering. Optional `focus`. |
 | `ask` | Raw one-shot query to Fable. Multi-turn history, system prompt, effort, optional reasoning summary. |
-| `list_models` | List available Claude models and their IDs (cached 5 minutes). |
 
 ### plan
 
@@ -53,14 +52,9 @@ This server uses the **Anthropic API with an API key (API credits)** — the onl
 | `prompt` | string | yes | The user message |
 | `system_prompt` | string | no | System prompt |
 | `messages` | string | no | History as a JSON array of `{role, content}` (roles `user`/`assistant` only) |
-| `model` | string | no | Model ID (default: server default, `claude-fable-5`) |
 | `effort` | string | no | `low`/`medium`/`high`/`xhigh`/`max` (default `medium`) |
 | `max_tokens` | integer | no | Max tokens to generate |
 | `show_reasoning` | boolean | no | Return a summary of Fable's reasoning in a `[thinking]` block |
-
-### list_models
-
-No parameters. Results cached for 5 minutes.
 
 ## Prerequisites
 
@@ -124,8 +118,8 @@ claude mcp add fable -- /media/codechap/4TB/develop/mcps/mcp-server-fable/target
 ```
 src/
   main.rs    - entry point, config loading, stdio transport setup
-  server.rs  - MCP tool definitions (plan, critique, ask, list_models) + fixed prompts
-  api.rs     - Anthropic HTTP client, Effort enum, Messages/Models types, refusal/cost formatter
+  server.rs  - MCP tool definitions (plan, critique, ask) + fixed prompts
+  api.rs     - Anthropic HTTP client, Effort enum, Messages types, refusal/cost formatter
   params.rs  - tool parameter types with serde + JSON Schema derives
   config.rs  - TOML config loading + effort validation
 ```

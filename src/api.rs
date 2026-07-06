@@ -308,24 +308,6 @@ impl fmt::Display for MessagesResponse {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Models API types
-// ---------------------------------------------------------------------------
-
-/// The response from listing available models (`GET /v1/models`).
-#[derive(Deserialize)]
-pub struct ModelsResponse {
-    pub data: Vec<ModelInfo>,
-}
-
-/// Information about a single model.
-#[derive(Deserialize)]
-pub struct ModelInfo {
-    pub id: String,
-    #[serde(default)]
-    pub display_name: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

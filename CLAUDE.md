@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-An MCP (Model Context Protocol) server that wraps **Anthropic Claude Fable 5** — Anthropic's most capable, most expensive model — exposing `plan`, `critique`, `ask`, and `list_models` as MCP tools over stdio. It mirrors the structure of `mcp-server-claude-chat`, but is deliberately purpose-built: Fable is used to plan and critique, then the output is handed to a cheaper model to execute. It is not a general chat wrapper.
+An MCP (Model Context Protocol) server that wraps **Anthropic Claude Fable 5** — Anthropic's most capable, most expensive model — exposing `plan`, `critique`, and `ask` as MCP tools over stdio. It mirrors the structure of `mcp-server-claude-chat`, but is deliberately purpose-built: Fable is used to plan and critique, then the output is handed to a cheaper model to execute. It is not a general chat wrapper.
 
 ## Build & Run
 
@@ -53,8 +53,8 @@ Five source files, no sub-crates:
 
 - **`main.rs`** — entry point. Loads config, builds `AnthropicClient`, builds `FableServer`, starts rmcp stdio transport.
 - **`config.rs`** — TOML config from `~/.config/mcp-server-fable/config.toml`. `api_key` (required), `base_url` (defaulted), `default_model`/`default_max_tokens`/`default_effort` (optional). `default_effort` is an `Effort` enum, so an invalid value is rejected at TOML parse time (no manual validation).
-- **`api.rs`** — the `Effort` enum (shared by config/params/requests), `AnthropicClient` (reqwest, generic `request<Req,Resp>()`), API types (`MessagesRequest`, `OutputConfig`, `Message`, `MessagesResponse`, `StopDetails`, `Usage`, `ModelsResponse`), and the `Display` formatter (refusal, token + cost lines). `Usage` owns both the cost estimate (`estimated_cost_usd`) and its line formatter (`write_summary`).
-- **`server.rs`** — MCP tools via rmcp `#[tool]`/`#[tool_router]`/`#[tool_handler]`. Tools: `plan`, `critique`, `ask`, `list_models`. Shared helpers: `resolve_effort`, `build_messages`, `resolve_model`, `build_request` (pure request assembly + `max_tokens` clamp, unit-tested), `run` (sends it), and `structured_task` (the shared `plan`/`critique` path: default model + fixed system prompt + work effort). Fixed prompts `PLAN_SYSTEM` / `CRITIQUE_SYSTEM`.
+- **`api.rs`** — the `Effort` enum (shared by config/params/requests), `AnthropicClient` (reqwest, generic `request<Req,Resp>()`), API types (`MessagesRequest`, `OutputConfig`, `Message`, `MessagesResponse`, `StopDetails`, `Usage`), and the `Display` formatter (refusal, token + cost lines). `Usage` owns both the cost estimate (`estimated_cost_usd`) and its line formatter (`write_summary`).
+- **`server.rs`** — MCP tools via rmcp `#[tool]`/`#[tool_router]`/`#[tool_handler]`. Tools: `plan`, `critique`, `ask`. Shared helpers: `resolve_effort`, `build_messages`, `build_request` (pure request assembly + `max_tokens` clamp, unit-tested), `run` (sends it), and `structured_task` (the shared `plan`/`critique` path: default model + fixed system prompt + work effort). Fixed prompts `PLAN_SYSTEM` / `CRITIQUE_SYSTEM`. Every request goes to the configured Fable model — there is no per-call model override, so the cost line is always at Fable rates by construction.
 - **`params.rs`** — serde + `JsonSchema` parameter structs; `#[schemars(description)]` becomes the MCP tool parameter docs.
 
 ## Key Constants (`server.rs` / `api.rs`)
@@ -77,4 +77,4 @@ Five source files, no sub-crates:
 
 ## Dependencies
 
-`rmcp` v1.2 for MCP protocol handling, `reqwest` for HTTP, `moka` for the models cache. Rust edition 2024.
+`rmcp` v1.2 for MCP protocol handling, `reqwest` for HTTP. Rust edition 2024.

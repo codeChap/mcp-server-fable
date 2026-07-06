@@ -15,7 +15,6 @@ Initial release.
     with severity + confidence for downstream filtering. Optional `focus`.
   - `ask` — raw one-shot Fable query with history, system prompt, effort, and an
     optional reasoning summary (`show_reasoning`).
-  - `list_models` — lists available Claude models (cached 5 minutes).
 - TOML config at `~/.config/mcp-server-fable/config.toml`: `api_key` (required),
   plus optional `base_url`, `default_model`, `default_max_tokens`,
   `default_effort` (validated as an enum at startup).
@@ -43,7 +42,7 @@ Initial release.
   Pro/Max subscription is intentionally not supported.
 - Fable requires ≥30-day data retention; zero-data-retention orgs get a 400 on
   every request.
-- Default model `claude-fable-5`. `list_models` reports the live set.
+- Default model `claude-fable-5` (override with `default_model` in config).
 - Web search and vision are intentionally omitted from v1 (web search is not in
   Fable's launch feature set; vision is supported and can be added later by
   porting claude-chat's `chat_with_vision`).
