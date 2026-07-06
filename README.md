@@ -1,5 +1,10 @@
 # mcp-server-fable
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
+[![Rust edition 2024](https://img.shields.io/badge/Rust-edition%202024-dea584.svg?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![MCP](https://img.shields.io/badge/MCP-server-6f42c1.svg)](https://modelcontextprotocol.io/)
+[![Model: Claude Fable 5](https://img.shields.io/badge/model-Claude%20Fable%205-d97757.svg)](https://www.anthropic.com/)
+
 An MCP (Model Context Protocol) server for **Anthropic Claude Fable 5** — Anthropic's most capable, most expensive model ($10 / $50 per 1M input / output tokens, ~2× Opus). Built in Rust, it exposes Fable as MCP tools so any MCP client (Claude Desktop, Claude Code, etc.) can call it.
 
 Fable is **not** a day-to-day chat model here. This server is built for the one thing that justifies the price: using Fable to **plan** and **critique**, then handing the result to a cheaper model (Sonnet / Haiku / Opus) to execute. Communicates via stdio using JSON-RPC 2.0, like the other servers in this collection. Structurally it mirrors `mcp-server-claude-chat`, adapted to Fable's API surface.
@@ -112,6 +117,43 @@ Claude Code:
 ```bash
 claude mcp add fable -- /media/codechap/4TB/develop/mcps/mcp-server-fable/target/release/fable
 ```
+
+## Usage
+
+Once it's registered, an MCP client calls the tools by name — the flagship is `plan`.
+
+### From an MCP client (e.g. Claude Code)
+
+Ask the model to use it, handing over the goal plus whatever context the executor will need:
+
+> Use the fable **plan** tool. goal: "Add a `--json` flag to the CLI that prints results as JSON". context: "Rust `clap` app; output currently goes through `println!` in `src/main.rs`". effort: high
+
+Claude Code issues a `tools/call` for `plan`; Fable returns a numbered, executor-ready plan — exact paths, signatures, edge cases, acceptance criteria — which you then hand to a cheaper model (Sonnet / Haiku) to implement verbatim.
+
+### Raw JSON-RPC over stdio
+
+The same call without a client — a `tools/call` request the server reads on stdin:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+  "name":"plan",
+  "arguments":{
+    "goal":"Add a --json flag to the CLI that prints results as JSON",
+    "context":"Rust clap app; output currently via println! in src/main.rs",
+    "effort":"high"
+  }}}
+```
+
+`plan` and `critique` return their content followed by a token + estimated-cost footer. Here is an **actual** response (from a tiny `ask` probe) showing that footer:
+
+```
+BINARY-OK
+[stop_reason: end_turn]
+[tokens: 21 input + 9 output = 30 total]
+[cost: ≈ $0.0007 (fable rates)]
+```
+
+Because the server only ever calls Fable, that cost line is always at Fable's $10 / $50 per-1M rates — accurate by construction, not by convention.
 
 ## Project Structure
 
