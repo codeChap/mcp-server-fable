@@ -1,0 +1,18 @@
+# Copy to ~/.config/mcp-server-fable/config.toml and fill in your key.
+
+# Required: your Anthropic API key (https://console.anthropic.com/settings/keys)
+api_key = "sk-ant-..."
+
+# Optional: override the API base URL (e.g. to route through a gateway / proxy).
+# base_url = "https://api.anthropic.com/v1"
+
+# Optional: default model used when a tool call omits `model`.
+# default_model = "claude-fable-5"
+
+# Optional: default max output tokens used when a tool call omits `max_tokens`.
+# default_max_tokens = 8192
+
+# Optional: default reasoning effort (low, medium, high, xhigh, max) when a tool
+# call omits `effort`. plan/critique fall back to "high", ask to "medium".
+# An invalid value is rejected at startup.
+# default_effort = "high"
