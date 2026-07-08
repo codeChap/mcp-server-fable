@@ -5,13 +5,35 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6f42c1.svg)](https://modelcontextprotocol.io/)
 [![Model: Claude Fable 5](https://img.shields.io/badge/model-Claude%20Fable%205-d97757.svg)](https://www.anthropic.com/)
 
-An MCP (Model Context Protocol) server for **Anthropic Claude Fable 5** — Anthropic's most capable, most expensive model ($10 / $50 per 1M input / output tokens, ~2× Opus). Built in Rust, it exposes Fable as MCP tools so any MCP client (Claude Desktop, Claude Code, etc.) can call it.
+An MCP (Model Context Protocol) server for **Anthropic Claude Fable 5** — Anthropic's most capable, most expensive model ($10 / $50 per 1M input / output tokens, ~2× Opus). Built in Rust, it exposes Fable as specialized MCP tools (`plan`, `critique`, `ask`) so **any** MCP client can use them.
 
-Fable is **not** a day-to-day chat model here. This server is built for the one thing that justifies the price: using Fable to **plan** and **critique**, then handing the result to a cheaper model (Sonnet / Haiku / Opus) to execute. Communicates via stdio using JSON-RPC 2.0, like the other servers in this collection. Structurally it mirrors `mcp-server-claude-chat`, adapted to Fable's API surface.
+Fable is **not** a day-to-day chat model here. This server is built for the one thing that justifies the price: using Fable to **plan** and **critique**, then handing the result to a cheaper model (Sonnet / Haiku / Opus) to execute. It works in Claude Code, Claude Desktop, Cursor, custom agents, and any other environment that supports MCP servers over stdio.
 
-## Why a separate server (Fable ≠ Opus API-wise)
+Communicates via stdio using JSON-RPC 2.0. Structurally it mirrors `mcp-server-claude-chat`, but is deliberately adapted to Fable's API surface and purpose-built for the plan-then-execute pattern.
 
-Fable's Messages API differs from the Opus-era shape, so this is an adaptation, not a copy:
+## Why mcp-server-fable (vs. Claude Code's built-in advisor)?
+
+Claude Code has a powerful native advisor feature (`/advisor fable` or the `advisor` tool). It lets a fast executor model (typically Sonnet or Haiku) dynamically ask Fable for guidance on hard decisions inside a single session.
+
+This MCP server takes a **complementary approach** that is useful in more situations:
+
+- **Explicit tools with handoff-optimized prompts** — `plan` and `critique` use fixed, carefully written system prompts designed so the output can be passed *verbatim* to a cheaper model. Plans are numbered, unambiguous, include exact paths/signatures, edge cases, acceptance criteria, and out-of-scope notes. Critiques are deliberately coverage-first (report everything; filter downstream).
+- **Works everywhere MCP works** — Not limited to Claude Code. Use it in Claude Desktop, Cursor, Windsurf, custom agent frameworks, VS Code MCP extensions, scripts, or any future tool that supports the Model Context Protocol.
+- **You control the orchestration** — Call Fable for planning or review exactly when *you* (or your multi-agent system) decide, instead of relying on the model to escalate.
+- **Clean composability** — Treat Fable as a reusable specialist service alongside your other MCP servers. Perfect for modern "expensive model for judgment, cheap model for execution" workflows.
+- **Correct Fable-specific behavior** — Proper `effort` levels, refusal handling (no silent fallback), long timeouts, and accurate per-call cost reporting at Fable rates.
+
+Many teams are converging on the same pattern the community discovered: use Fable narrowly for architecture, planning, and review, then execute with cheaper models. This server gives you first-class, portable tools for the "Fable parts" of that pattern.
+
+See the "Technical details" section below for the specific Fable API differences that also required a dedicated implementation.
+
+## Subscription vs. API credits
+
+This server uses the **Anthropic API with an API key (API credits)** — the only supported, terms-compliant way to drive Claude from a third-party tool. A Claude Pro/Max subscription is not usable here. Point `base_url` at an Anthropic-compatible gateway if you run one.
+
+## Technical details: Fable API differences
+
+Fable's Messages API differs from the Opus-era shape (this is why a dedicated server was needed rather than reusing a general Claude chat wrapper):
 
 - **No sampling parameters** — `temperature` / `top_p` / `top_k` are rejected with a 400. There is no `temperature` tool argument.
 - **Adaptive thinking only** — reasoning is always on; depth is controlled by **`effort`** (`low` / `medium` / `high` / `xhigh` / `max`), not a token budget. The raw chain of thought is never returned; `ask` can request a readable *summary* via `show_reasoning`.
@@ -19,10 +41,6 @@ Fable's Messages API differs from the Opus-era shape, so this is an adaptation, 
 - **30-day data retention required** — Fable is not available to zero-data-retention orgs; such orgs get a 400 on every request.
 
 Every response also prints an **estimated USD cost** (at Fable's sticker rates), since cost-consciousness is the whole point.
-
-## Subscription vs. API credits
-
-This server uses the **Anthropic API with an API key (API credits)** — the only supported, terms-compliant way to drive Claude from a third-party tool. A Claude Pro/Max subscription is not usable here. Point `base_url` at an Anthropic-compatible gateway if you run one.
 
 ## Tools
 
@@ -66,27 +84,19 @@ This server uses the **Anthropic API with an API key (API credits)** — the onl
 - Rust (edition 2024)
 - An Anthropic API key from [console.anthropic.com](https://console.anthropic.com/settings/keys), on an org with ≥30-day data retention
 
-## Setup
-
-```bash
-mkdir -p ~/.config/mcp-server-fable
-cp config.toml.example ~/.config/mcp-server-fable/config.toml
-# then edit it and set api_key
-```
-
-Config (`~/.config/mcp-server-fable/config.toml`):
+The server expects a config file at `~/.config/mcp-server-fable/config.toml` containing at minimum your `api_key`. See `config.toml.example`.
 
 ```toml
 api_key = "sk-ant-..."
 
-# Optional:
-# base_url = "https://api.anthropic.com/v1"   # or a compatible gateway
+# Optional overrides:
+# base_url = "https://api.anthropic.com/v1"
 # default_model = "claude-fable-5"
 # default_max_tokens = 8192
-# default_effort = "high"                       # low|medium|high|xhigh|max
+# default_effort = "high"   # low | medium | high | xhigh | max
 ```
 
-The server fails fast at startup if the config is missing, `api_key` is empty, or `default_effort` is invalid.
+The server fails fast at startup if the config is missing, `api_key` is empty, or `default_effort` (if set) is invalid.
 
 ## Build
 
@@ -98,25 +108,72 @@ RUST_LOG=debug cargo run
 cargo test              # unit tests (response formatting, cost, refusal, effort, message building)
 ```
 
-## MCP Configuration
+## Installation & MCP Configuration
 
-Claude Desktop (`~/.config/Claude/claude_desktop_config.json`) or any MCP client:
+### 1. Build the server
+
+```bash
+cargo build --release
+# The binary will be at: target/release/fable
+```
+
+Use the **full absolute path** to `target/release/fable` in all configuration below.
+
+### 2. AI-assisted installation (recommended modern method)
+
+Copy the block below and paste it directly to your AI coding assistant (Claude Code, Cursor, Grok, etc.). The AI will handle cloning (if needed), building, path resolution, and registration for you.
+
+```
+Add the mcp-server-fable MCP server for me.
+
+Repository: https://github.com/<your-username>/mcp-server-fable   (update this URL if you have a fork)
+
+Steps to perform:
+1. If the repo isn't cloned locally yet, clone it and cd into it.
+2. Build the release binary:
+     cargo build --release
+3. Determine the absolute path to the built binary (target/release/fable).
+4. Set up the config directory and file:
+     mkdir -p ~/.config/mcp-server-fable
+     cp config.toml.example ~/.config/mcp-server-fable/config.toml
+   Then edit the config and add your Anthropic API key (api_key = "sk-ant-...").
+
+5. Register it as an MCP server named "fable".
+
+   For Claude Code, run:
+     claude mcp add fable -- <ABSOLUTE_PATH_TO>/target/release/fable
+
+   For Claude Desktop or other MCP clients, add this under the "mcpServers" key (use the real absolute path):
+{
+  "fable": {
+    "command": "<ABSOLUTE_PATH_TO>/target/release/fable"
+  }
+}
+
+After setup, test that the `plan` tool is available and working.
+```
+
+### 3. Manual configuration
+
+Claude Desktop or any MCP client (`~/.config/Claude/claude_desktop_config.json` or equivalent):
 
 ```json
 {
   "mcpServers": {
     "fable": {
-      "command": "/media/codechap/4TB/develop/mcps/mcp-server-fable/target/release/fable"
+      "command": "/absolute/path/to/mcp-server-fable/target/release/fable"
     }
   }
 }
 ```
 
-Claude Code:
+Claude Code (one-liner):
 
 ```bash
-claude mcp add fable -- /media/codechap/4TB/develop/mcps/mcp-server-fable/target/release/fable
+claude mcp add fable -- /absolute/path/to/mcp-server-fable/target/release/fable
 ```
+
+Replace the path with your actual absolute path to the release binary.
 
 ## Usage
 
